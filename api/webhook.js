@@ -1,6 +1,6 @@
 import { addDonation } from './_storage.js';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
@@ -24,15 +24,17 @@ export default function handler(req, res) {
       return res.status(200).json({ status: 'rejected', reason: 'amount_too_small' });
     }
 
-    addDonation(donation);
-    console.log(`Saved: ${donation.username} Rp${donation.amount}`);
+    const queueLength = await addDonation(donation);
+    console.log(`Saved: ${donation.username} Rp${donation.amount} - Queue: ${queueLength}`);
 
     return res.status(200).json({
       status: 'success',
-      donation: donation
+      donation: donation,
+      queueLength: queueLength
     });
 
   } catch (err) {
+    console.error('Webhook error:', err);
     return res.status(500).json({ error: 'Webhook failed', message: err.message });
   }
 }
