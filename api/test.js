@@ -1,6 +1,6 @@
 import { addDonation } from './_storage.js';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
@@ -25,13 +25,14 @@ export default function handler(req, res) {
       source: 'test'
     };
 
-    addDonation(donation);
-    console.log('Test donation added:', donation);
+    const queueLength = await addDonation(donation);
+    console.log('Test donation added:', donation, 'Queue:', queueLength);
 
     return res.status(200).json({
       status: 'success',
       message: 'Test donation added!',
-      donation: donation
+      donation: donation,
+      queueLength: queueLength
     });
 
   } catch (err) {
