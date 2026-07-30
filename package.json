@@ -1,5 +1,6 @@
 {
-  "name": "saweria-api",
+  "name": "saweria-webhook-complete",
   "version": "1.0.0",
+  "description": "Complete Saweria webhook integration for Roblox",
   "type": "module"
 }
