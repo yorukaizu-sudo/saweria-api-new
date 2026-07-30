@@ -1,342 +1,186 @@
-// =====================================================
-//        SAWERIA WEBHOOK API - COMPLETE VERSION
-//        All-in-one solution for Roblox integration
-// =====================================================
-
-// In-memory storage (resets on serverless cold start)
 let donations = [];
-let stats = {
-  totalDonations: 0,
-  totalAmount: 0,
-  serverStartTime: Date.now()
-};
+let totalStats = { count: 0, amount: 0, start: Date.now() };
 
-// Helper functions
-function log(message) {
-  console.log(`[${new Date().toISOString()}] ${message}`);
-}
-
-function formatRupiah(amount) {
-  return `Rp ${amount.toLocaleString('id-ID')}`;
-}
-
-function validateDonation(data) {
-  const donation = {
-    id: Date.now() + Math.random(),
-    username: data.donatur_name || data.donator_name || data.nama_donatur || 'Anonymous',
-    amount: parseInt(data.amount_raw) || parseInt(data.amount) || parseInt(data.jumlah) || 0,
-    message: data.message || data.donator_message || data.pesan || '',
-    timestamp: Date.now(),
-    source: data.source || 'saweria',
-    rawData: data
-  };
-
-  // Cleanup username
-  donation.username = donation.username.replace(/[^a-zA-Z0-9_]/g, '').substring(0, 20);
-  if (!donation.username) donation.username = 'Anonymous';
-
-  return donation;
-}
-
-export default async function handler(req, res) {
-  // Enable CORS for all origins
-  res.setHeader('Access-Control-Allow-Credentials', true);
+export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-api-key, Authorization');
-
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { method, url } = req;
-  const startTime = Date.now();
-  
-  log(`${method} ${url} - Processing started`);
+  const apiKey = req.headers['x-api-key'];
+  const validKey = process.env.API_KEY || 'saweria2024';
 
-  // Get API key for protected endpoints
-  const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'] || req.headers['authorization']?.replace('Bearer ', '');
-  const validApiKey = process.env.API_KEY || 'saweria2024';
+  console.log(`[${new Date().toISOString()}] ${method} ${url}`);
 
-  try {
-    // ===== ROOT ENDPOINT - SERVER INFO =====
-    if (method === 'GET' && url === '/api') {
-      const uptime = Date.now() - stats.serverStartTime;
-      
-      return res.status(200).json({
-        status: '🚀 Saweria Webhook Server Online',
-        version: '2.0.0',
-        serverTime: new Date().toISOString(),
-        uptime: Math.floor(uptime / 1000),
-        endpoints: {
-          root: 'GET /api - Server information',
-          webhook: 'POST /api/webhook - Receive donations from Saweria',
-          getdonations: 'GET /api/getdonations - Fetch donations for Roblox (requires x-api-key)',
-          test: 'POST /api/test - Add test donation (requires x-api-key)',
-          stats: 'GET /api/stats - Server statistics',
-          health: 'GET /api/health - Health check'
-        },
-        stats: {
-          pendingDonations: donations.length,
-          totalProcessed: stats.totalDonations,
-          totalAmount: formatRupiah(stats.totalAmount)
-        },
-        security: {
-          apiKeyRequired: ['getdonations', 'test'],
-          apiKeySet: process.env.API_KEY ? 'Custom' : 'Default (saweria2024)'
-        },
-        lastDonation: donations.length > 0 ? donations[donations.length - 1] : null
-      });
-    }
-
-    // ===== WEBHOOK ENDPOINT - RECEIVE FROM SAWERIA =====
-    if (method === 'POST' && url === '/api/webhook') {
-      try {
-        const rawData = req.body || {};
-        log(`Webhook received: ${JSON.stringify(rawData)}`);
-
-        // Validate and process donation
-        const donation = validateDonation(rawData);
-
-        // Check minimum amount
-        if (donation.amount < 1000) {
-          log(`Donation rejected - too small: ${formatRupiah(donation.amount)}`);
-          return res.status(200).json({
-            status: 'rejected',
-            reason: 'amount_too_small',
-            minimumAmount: 1000,
-            receivedAmount: donation.amount
-          });
-        }
-
-        // Store donation
-        donations.push(donation);
-        stats.totalDonations++;
-        stats.totalAmount += donation.amount;
-
-        // Maintain max 100 donations in memory
-        if (donations.length > 100) {
-          const removed = donations.shift();
-          log(`Removed old donation: ${removed.username} - ${formatRupiah(removed.amount)}`);
-        }
-
-        log(`✅ Donation accepted: ${donation.username} - ${formatRupiah(donation.amount)} - "${donation.message}"`);
-
-        return res.status(200).json({
-          status: 'success',
-          message: 'Donation received and queued successfully',
-          donation: {
-            id: donation.id,
-            username: donation.username,
-            amount: donation.amount,
-            message: donation.message,
-            timestamp: donation.timestamp
-          },
-          queue: {
-            pending: donations.length,
-            position: donations.length
-          }
-        });
-
-      } catch (error) {
-        log(`❌ Webhook error: ${error.message}`);
-        return res.status(500).json({
-          status: 'error',
-          message: 'Failed to process webhook',
-          error: error.message
-        });
+  // ROOT
+  if (method === 'GET' && url === '/api') {
+    return res.status(200).json({
+      status: '🚀 Saweria API Running!',
+      version: '3.0.0',
+      time: new Date().toISOString(),
+      pendingDonations: donations.length,
+      totalProcessed: totalStats.count,
+      apiKey: process.env.API_KEY ? 'Custom' : 'Default (saweria2024)',
+      endpoints: {
+        root: 'GET /api',
+        webhook: 'POST /api/webhook',
+        getdonations: 'GET /api/getdonations (x-api-key required)',
+        test: 'POST /api/test (x-api-key required)',
+        stats: 'GET /api/stats',
+        health: 'GET /api/health'
       }
-    }
+    });
+  }
 
-    // ===== GET DONATIONS ENDPOINT - FOR ROBLOX =====
-    if (method === 'GET' && url === '/api/getdonations') {
-      // Validate API key
-      if (!apiKey || apiKey !== validApiKey) {
-        log(`❌ Unauthorized getdonations attempt from ${req.headers['user-agent'] || 'unknown'}`);
-        return res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Valid x-api-key header required',
-          hint: 'Include x-api-key header with your API key'
-        });
-      }
+  // WEBHOOK - Saweria kirim ke sini
+  if (method === 'POST' && url === '/api/webhook') {
+    try {
+      const data = req.body || {};
+      console.log('Webhook received:', JSON.stringify(data));
 
-      // Get all pending donations
-      const pendingDonations = [...donations];
-      
-      // Clear queue after retrieval
-      donations = [];
-      
-      log(`📤 Sent ${pendingDonations.length} donations to Roblox`);
-      
-      if (pendingDonations.length > 0) {
-        const donationSummary = pendingDonations.map(d => 
-          `${d.username}:${formatRupiah(d.amount)}`
-        ).join(', ');
-        log(`Donations: ${donationSummary}`);
-      }
-
-      return res.status(200).json({
-        success: true,
-        donations: pendingDonations,
-        count: pendingDonations.length,
+      const donation = {
+        id: Date.now() + Math.random(),
+        username: data.donatur_name || data.donator_name || 'Anonymous',
+        amount: parseInt(data.amount_raw) || parseInt(data.amount) || 0,
+        message: data.message || data.donator_message || '',
         timestamp: Date.now(),
-        stats: {
-          totalProcessed: stats.totalDonations,
-          totalAmount: stats.totalAmount
-        }
-      });
-    }
+        source: 'saweria'
+      };
 
-    // ===== TEST ENDPOINT - MANUAL TESTING =====
-    if (method === 'POST' && url === '/api/test') {
-      // Validate API key
-      if (!apiKey || apiKey !== validApiKey) {
-        return res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Valid x-api-key header required for test endpoint'
-        });
-      }
-
-      try {
-        const { 
-          username = 'TestUser', 
-          amount = 10000, 
-          message = 'Test donation from API' 
-        } = req.body || {};
-
-        const testDonation = {
-          id: Date.now() + Math.random(),
-          username: String(username).replace(/[^a-zA-Z0-9_]/g, '').substring(0, 20) || 'TestUser',
-          amount: parseInt(amount) || 10000,
-          message: String(message).substring(0, 100) || 'Test donation',
-          timestamp: Date.now(),
-          source: 'test'
-        };
-
-        donations.push(testDonation);
-        stats.totalDonations++;
-        stats.totalAmount += testDonation.amount;
-
-        log(`🧪 Test donation added: ${testDonation.username} - ${formatRupiah(testDonation.amount)}`);
-
+      if (donation.amount < 1000) {
+        console.log('Rejected - too small:', donation.amount);
         return res.status(200).json({
-          status: 'success',
-          message: 'Test donation added successfully',
-          donation: testDonation,
-          queue: {
-            pending: donations.length,
-            total: stats.totalDonations
-          }
-        });
-
-      } catch (error) {
-        log(`❌ Test endpoint error: ${error.message}`);
-        return res.status(500).json({
-          error: 'Test failed',
-          message: error.message
+          status: 'rejected',
+          reason: 'amount_too_small',
+          minimum: 1000
         });
       }
-    }
 
-    // ===== STATS ENDPOINT - MONITORING =====
-    if (method === 'GET' && url === '/api/stats') {
-      const uptime = Date.now() - stats.serverStartTime;
-      const avgAmount = stats.totalDonations > 0 ? stats.totalAmount / stats.totalDonations : 0;
+      donations.push(donation);
+      totalStats.count++;
+      totalStats.amount += donation.amount;
 
-      return res.status(200).json({
-        server: {
-          status: 'online',
-          uptime: Math.floor(uptime / 1000),
-          startTime: new Date(stats.serverStartTime).toISOString(),
-          version: '2.0.0'
-        },
-        donations: {
-          pending: donations.length,
-          totalProcessed: stats.totalDonations,
-          totalAmount: stats.totalAmount,
-          averageAmount: Math.round(avgAmount),
-          formatted: {
-            totalAmount: formatRupiah(stats.totalAmount),
-            averageAmount: formatRupiah(avgAmount)
-          }
-        },
-        recent: donations.slice(-5).map(d => ({
-          username: d.username,
-          amount: d.amount,
-          message: d.message,
-          source: d.source,
-          time: new Date(d.timestamp).toISOString()
-        })),
-        memory: process.memoryUsage ? process.memoryUsage() : null
-      });
-    }
+      if (donations.length > 100) donations.shift();
 
-    // ===== HEALTH CHECK ENDPOINT =====
-    if (method === 'GET' && url === '/api/health') {
-      return res.status(200).json({
-        status: 'healthy',
-        timestamp: Date.now(),
-        uptime: Date.now() - stats.serverStartTime,
-        checks: {
-          memory: 'ok',
-          donations: donations.length,
-          api: 'operational'
-        }
-      });
-    }
+      console.log(`Saved: ${donation.username} - Rp${donation.amount}`);
 
-    // ===== CLEAR ENDPOINT - EMERGENCY CLEAR QUEUE =====
-    if (method === 'POST' && url === '/api/clear') {
-      if (!apiKey || apiKey !== validApiKey) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const clearedCount = donations.length;
-      donations = [];
-      
-      log(`🗑️ Queue cleared: ${clearedCount} donations removed`);
-      
       return res.status(200).json({
         status: 'success',
-        message: 'Donation queue cleared',
-        clearedCount: clearedCount
+        donation: donation,
+        pending: donations.length
+      });
+
+    } catch (err) {
+      console.error('Webhook error:', err);
+      return res.status(500).json({ error: 'Webhook failed', message: err.message });
+    }
+  }
+
+  // GET DONATIONS - Roblox ambil dari sini
+  if (method === 'GET' && url === '/api/getdonations') {
+    if (!apiKey || apiKey !== validKey) {
+      console.log('Unauthorized attempt');
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Valid x-api-key required'
       });
     }
 
-    // ===== 404 NOT FOUND =====
-    return res.status(404).json({
-      error: 'Endpoint Not Found',
-      method: method,
-      url: url,
-      timestamp: new Date().toISOString(),
-      available: {
-        public: [
-          'GET /api - Server info',
-          'POST /api/webhook - Saweria webhook',
-          'GET /api/stats - Statistics',
-          'GET /api/health - Health check'
-        ],
-        protected: [
-          'GET /api/getdonations - Get donations (x-api-key required)',
-          'POST /api/test - Add test donation (x-api-key required)',
-          'POST /api/clear - Clear queue (x-api-key required)'
-        ]
-      },
-      hint: 'Check the available endpoints above'
-    });
+    const result = [...donations];
+    donations = [];
 
-  } catch (error) {
-    log(`💥 Unhandled error: ${error.message}`);
-    
-    return res.status(500).json({
-      error: 'Internal Server Error',
-      message: error.message,
-      timestamp: new Date().toISOString()
+    console.log(`Sent ${result.length} donations to Roblox`);
+
+    return res.status(200).json({
+      success: true,
+      donations: result,
+      count: result.length,
+      timestamp: Date.now()
     });
-    
-  } finally {
-    const processingTime = Date.now() - startTime;
-    log(`${method} ${url} - Completed in ${processingTime}ms`);
   }
+
+  // TEST - Manual testing
+  if (method === 'POST' && url === '/api/test') {
+    if (!apiKey || apiKey !== validKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const body = req.body || {};
+      const donation = {
+        id: Date.now() + Math.random(),
+        username: String(body.username || 'TestUser').substring(0, 20),
+        amount: parseInt(body.amount) || 10000,
+        message: String(body.message || 'Test donation!').substring(0, 100),
+        timestamp: Date.now(),
+        source: 'test'
+      };
+
+      donations.push(donation);
+      totalStats.count++;
+      totalStats.amount += donation.amount;
+
+      console.log('Test donation added:', donation);
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Test donation added!',
+        donation: donation,
+        pending: donations.length
+      });
+
+    } catch (err) {
+      return res.status(500).json({ error: 'Test failed', message: err.message });
+    }
+  }
+
+  // STATS
+  if (method === 'GET' && url === '/api/stats') {
+    const uptime = Math.floor((Date.now() - totalStats.start) / 1000);
+    return res.status(200).json({
+      uptime: uptime,
+      pending: donations.length,
+      totalProcessed: totalStats.count,
+      totalAmount: totalStats.amount,
+      recentDonations: donations.slice(-5)
+    });
+  }
+
+  // HEALTH
+  if (method === 'GET' && url === '/api/health') {
+    return res.status(200).json({
+      status: 'healthy',
+      timestamp: Date.now(),
+      pending: donations.length
+    });
+  }
+
+  // CLEAR QUEUE
+  if (method === 'POST' && url === '/api/clear') {
+    if (!apiKey || apiKey !== validKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const cleared = donations.length;
+    donations = [];
+    return res.status(200).json({
+      status: 'success',
+      cleared: cleared
+    });
+  }
+
+  // 404
+  return res.status(404).json({
+    error: 'Not Found',
+    path: url,
+    method: method,
+    available: [
+      'GET /api',
+      'POST /api/webhook',
+      'GET /api/getdonations',
+      'POST /api/test',
+      'GET /api/stats',
+      'GET /api/health'
+    ]
+  });
 }
